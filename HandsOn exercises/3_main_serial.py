@@ -5,13 +5,13 @@ import time
 import logging
 
 from PyQt5 import QtCore
-from PyQt5.QtCore import (
+from PyQt5.QtCore import ( #logging library (to perform multithreading)
     QObject,
     QThreadPool, 
-    QRunnable, 
+    QRunnable,  
     pyqtSignal, 
     pyqtSlot
-)
+) #tools to manage the multithreading
 
 from PyQt5.QtWidgets import (
     QApplication,
@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-import serial
+import serial #Serial Communication Protocol 
 import serial.tools.list_ports
 
 
@@ -30,14 +30,14 @@ import serial.tools.list_ports
 CONN_STATUS = False
 
 
-# Logging config
+# Logging config -> equivalent to print() but for multithreading
 logging.basicConfig(format="%(message)s", level=logging.INFO)
 
 
 #########################
 # SERIAL_WORKER_SIGNALS #
 #########################
-class SerialWorkerSignals(QObject):
+class SerialWorkerSignals(QObject): #parent class QObject, child class SerialWorkerSignals
     """!
     @brief Class that defines the signals available to a serialworker.
 
@@ -48,22 +48,24 @@ class SerialWorkerSignals(QObject):
             str --> port name
             int --> macro representing the state (0 - error during opening, 1 - success)
     """
-    device_port = pyqtSignal(str)
-    status = pyqtSignal(str, int)
+
+    #Define 2 signals
+    device_port = pyqtSignal(str) #COM PORT where the PSOC is connected
+    status = pyqtSignal(str, int) #pyqtSignal
 
 
 #################
 # SERIAL_WORKER #
 #################
-class SerialWorker(QRunnable):
+class SerialWorker(QRunnable): #Open serial port; QRunnable is parent class, SerialWorker is our child class
     """!
     @brief Main class for serial communication: handles connection with device.
     """
-    def __init__(self, serial_port_name):
+    def __init__(self, serial_port_name): #we will set the serial_port_name when creating the object SerialWorker
         """!
         @brief Init worker.
         """
-        self.is_killed = False
+        self.is_killed = False # global Boolean variable to handle multi-threading (see slides from lecture) -> it terminates QRunnable subclasses when it turns TRUE
         super().__init__()
         # init port, params and signals
         self.port = serial.Serial()
@@ -71,20 +73,20 @@ class SerialWorker(QRunnable):
         self.baudrate = 9600 # hard coded but can be a global variable, or an input param
         self.signals = SerialWorkerSignals()
 
-    @pyqtSlot()
-    def run(self):
+    @pyqtSlot() #Slot in multithreading application -> receive signals
+    def run(self): #What the parallel thread does MUST be inside the run method
         """!
         @brief Estabilish connection with desired serial port.
         """
         global CONN_STATUS
 
-        if not CONN_STATUS:
+        if not CONN_STATUS: #if not connected, try to connect to serial port
             try:
                 self.port = serial.Serial(port=self.port_name, baudrate=self.baudrate,
                                         write_timeout=0, timeout=2)                
-                if self.port.is_open:
+                if self.port.is_open: #if the port is open
                     CONN_STATUS = True
-                    self.signals.status.emit(self.port_name, 1)
+                    self.signals.status.emit(self.port_name, 1) 
                     time.sleep(0.01)     
             except serial.SerialException:
                 logging.info("Error with port {}.".format(self.port_name))
@@ -127,9 +129,9 @@ class MainWindow(QMainWindow):
         @brief Init MainWindow.
         """
         # define worker
-        self.serial_worker = SerialWorker(None)
+        self.serial_worker = SerialWorker(None) #start empty SerialWorker since we don't know the serial_port_name yet
 
-        super(MainWindow, self).__init__()
+        super(MainWindow, self).__init__() #initialize parent class
 
         # title and geometry
         self.setWindowTitle("GUI")
@@ -138,11 +140,11 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(width, height)
 
         # create thread handler
-        self.threadpool = QThreadPool()
+        self.threadpool = QThreadPool() #initialize the contenitore of the thread pool
 
         self.connected = CONN_STATUS
-        self.serialscan()
-        self.initUI()
+        self.serialscan() #method defined below
+        self.initUI() #standard method for layout
 
 
     #####################
@@ -156,6 +158,7 @@ class MainWindow(QMainWindow):
         button_hlay = QHBoxLayout()
         button_hlay.addWidget(self.com_list_widget)
         button_hlay.addWidget(self.conn_btn)
+
         widget = QWidget()
         widget.setLayout(button_hlay)
         self.setCentralWidget(widget)
@@ -177,7 +180,7 @@ class MainWindow(QMainWindow):
         self.conn_btn = QPushButton(
             text=("Connect to port {}".format(self.port_text)), 
             checkable=True,
-            toggled=self.on_toggle
+            toggled=self.on_toggle #toggle updates everytime a button is pressed or released
         )
 
         # acquire list of serial ports and add it to the combo box
@@ -185,7 +188,7 @@ class MainWindow(QMainWindow):
                 p.name
                 for p in serial.tools.list_ports.comports()
             ]
-        self.com_list_widget.addItems(serial_ports)
+        self.com_list_widget.addItems(serial_ports) #addItems to object QComboBox()
 
 
     ##################
@@ -260,6 +263,6 @@ class MainWindow(QMainWindow):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     w = MainWindow()
-    app.aboutToQuit.connect(w.ExitHandler)
+    app.aboutToQuit.connect(w.ExitHandler) #add this line due to multithreading
     w.show()
     sys.exit(app.exec_())
